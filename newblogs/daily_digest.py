@@ -6,7 +6,9 @@ import requests
 import feedparser
 import html2text
 import schedule
+import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
+from podcast_analyzer import analyze_podcast_audio
 
 # ==========================================
 # 配置
@@ -20,6 +22,7 @@ MODEL_NAME = "deepseek-chat"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 RSS_MAP_FILE = os.path.join(CURRENT_DIR, "known_rss_map.json")
 SOURCE_FILE = os.path.join(CURRENT_DIR, "channels_from_excel.json")
+PODCAST_OPML_FILE = os.path.join(os.path.dirname(CURRENT_DIR), "BestBlogs_RSS_ALL_copy.opml")
 OUTPUT_DIR = os.path.join(CURRENT_DIR, "daily_reports")
 
 # 确保输出目录存在
@@ -101,6 +104,43 @@ def load_rss_feeds():
     print(f"[*] 已加载 {len(feeds)} 个有效的 RSS 订阅源")
     return feeds
 
+def load_opml_feeds(file_path, limit=None):
+    """
+    从 OPML 文件加载播客源
+    """
+    feeds = []
+    if not os.path.exists(file_path):
+        print(f"[-] OPML 文件不存在: {file_path}")
+        return feeds
+        
+    try:
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+        
+        # 查找所有 type="rss" 的 outline
+        for outline in root.findall(".//outline[@type='rss']"):
+            title = outline.get("text") or outline.get("title")
+            xml_url = outline.get("xmlUrl")
+            
+            if title and xml_url:
+                feeds.append({
+                    "name": title,
+                    "homepage": xml_url, # 播客通常没有单独的主页 URL 字段，暂时用 rss url 代替或留空
+                    "rss_url": xml_url,
+                    "is_podcast": True
+                })
+                
+    except Exception as e:
+        print(f"[-] 解析 OPML 失败: {e}")
+        
+    print(f"[*] 已加载 {len(feeds)} 个播客源")
+    
+    if limit:
+        print(f"[*] 限制测试: 仅保留前 {limit} 个播客源")
+        feeds = feeds[:limit]
+        
+    return feeds
+
 def fetch_url_content(url):
     """获取 URL 内容"""
     try:
@@ -177,9 +217,6 @@ def process_feed(feed):
         today_articles = []
         # 定义 "今天" 的范围 (过去 24 小时)
         now = datetime.datetime.now()
-        # 注意: feedparser 的 published_parsed 是 time.struct_time (UTC)
-        # 这里为了简单，我们假设如果获取不到时间，就默认是新的(或跳过)
-        # 实际生产中需要更严谨的时区处理
         
         for entry in d.entries:
             # 获取发布时间
@@ -192,31 +229,51 @@ def process_feed(feed):
             # 如果没有时间，或者时间在 24 小时内
             is_new = False
             if published_time:
-                # 简单判断：过去 24 小时
-                if (now - published_time).total_seconds() < 24 * 3600:
+                # 简单判断：过去 30 天 (为了测试播客，暂时放宽时间限制)
+                if (now - published_time).total_seconds() < 24 * 3600 * 30:
                     is_new = True
             else:
-                # 没有时间戳，暂时忽略
                 pass 
             
             if is_new:
-                print(f"  [+] 发现新文章: {entry.title}")
-                # 获取正文
+                print(f"  [+] 发现新内容: {entry.title}")
                 link = entry.link
-                content_html = fetch_url_content(link)
-                content_md = html_to_markdown(content_html)
+                analysis = None
+                is_podcast_entry = False
+
+                # 检查是否为播客 (Audio Enclosure)
+                audio_url = None
+                if hasattr(entry, 'enclosures'):
+                    for enclosure in entry.enclosures:
+                        if enclosure.type and enclosure.type.startswith('audio/'):
+                            audio_url = enclosure.href
+                            break
                 
-                if content_md:
-                    # 分析
-                    analysis = call_deepseek_analyze(content_md)
-                    if analysis:
-                        today_articles.append({
-                            "original_title": entry.title,
-                            "link": link,
-                            "author": feed['name'],
-                            "published": published_time.strftime("%Y-%m-%d %H:%M") if published_time else "Unknown",
-                            "analysis": analysis
-                        })
+                # 如果是播客源或者是音频内容
+                if audio_url:
+                    is_podcast_entry = True
+                    print(f"   [🎙️] 识别为播客音频: {audio_url}")
+                    analysis = analyze_podcast_audio(audio_url)
+                else:
+                    # 普通文章
+                    content_html = fetch_url_content(link)
+                    content_md = html_to_markdown(content_html)
+                    if content_md:
+                         analysis = call_deepseek_analyze(content_md)
+
+                if analysis:
+                    today_articles.append({
+                        "original_title": entry.title,
+                        "link": link,
+                        "author": feed['name'],
+                        "published": published_time.strftime("%Y-%m-%d %H:%M") if published_time else "Unknown",
+                        "analysis": analysis,
+                        "is_podcast": is_podcast_entry
+                    })
+                    
+                    # 测试模式：每个 feed 只处理 1 篇文章/播客
+                    if len(today_articles) >= 1:
+                        break
                         
         return today_articles
         
@@ -241,7 +298,8 @@ def generate_daily_report(articles):
         
         for i, article in enumerate(articles, 1):
             analysis = article['analysis']
-            f.write(f"## {i}. {analysis.get('title_translated', article['original_title'])}\n\n")
+            title_prefix = "[🎙️ 播客] " if article.get('is_podcast') else ""
+            f.write(f"## {i}. {title_prefix}{analysis.get('title_translated', article['original_title'])}\n\n")
             f.write(f"- **来源**: {article['author']}\n")
             f.write(f"- **发布时间**: {article['published']}\n")
             f.write(f"- **原文链接**: [点击阅读]({article['link']})\n")
@@ -264,7 +322,15 @@ def generate_daily_report(articles):
 
 def job():
     print(f"\n[{datetime.datetime.now()}] 开始执行每日任务...")
-    feeds = load_rss_feeds()
+    
+    # 1. 加载文章 RSS (测试播客时暂时跳过)
+    # feeds = load_rss_feeds()
+    feeds = []
+    
+    # 2. 加载播客 RSS (测试阶段仅加载 1 个)
+    podcast_feeds = load_opml_feeds(PODCAST_OPML_FILE, limit=1)
+    feeds.extend(podcast_feeds)
+    
     all_articles = []
     
     for feed in feeds:
