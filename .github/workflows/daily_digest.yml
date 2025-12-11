@@ -35,7 +35,7 @@ jobs:
         python daily_digest.py
 
     - name: Upload Daily Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: daily-report
         path: daily_reports/*.md
