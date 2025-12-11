@@ -1,0 +1,18 @@
+{
+    "deepseek_api_key": "sk-f0da4ec56a0344d299f15d078ea811af",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-chat",
+    "dashscope_api_key": "sk-e28a0c76241a48f4b30458ad598e1ae1",
+    "dingtalk": {
+        "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=7a89536c49f4eaeb95f770a8cc50ba3da772fbc5dbf666f092ac9ca126ebaef1",
+        "secret": "文章"
+    },
+    "time_window_hours": 24,
+    "limit_testing": false,
+    "files": {
+        "rss_map_file": "known_rss_map.json",
+        "source_file": "channels_from_excel.json",
+        "podcast_opml_file": "BestBlogs_RSS_Podcasts_copy.opml",
+        "output_dir": "daily_reports"
+    }
+}

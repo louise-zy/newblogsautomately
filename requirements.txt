@@ -1,0 +1,6 @@
+requests
+feedparser
+html2text
+schedule
+dashscope
+beautifulsoup4
