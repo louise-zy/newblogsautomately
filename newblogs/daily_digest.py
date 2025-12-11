@@ -28,16 +28,12 @@ except Exception as e:
     print(f"[-] 配置文件加载失败: {e}")
     config = {}
 
-# API Key 配置 (优先使用环境变量，其次使用配置文件)
+# API Key 配置
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", config.get("deepseek_api_key", ""))
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", config.get("deepseek_base_url", "https://api.deepseek.com"))
-MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", config.get("deepseek_model", "deepseek-chat"))
-DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", config.get("dashscope_api_key", ""))
-TIME_WINDOW_HOURS = int(os.environ.get("TIME_WINDOW_HOURS", config.get("time_window_hours", 24)))
-
-# 设置 DashScope API Key 环境变量供 SDK 使用
-if DASHSCOPE_API_KEY:
-    os.environ["DASHSCOPE_API_KEY"] = DASHSCOPE_API_KEY
+OPENAI_BASE_URL = config.get("deepseek_base_url", "https://api.deepseek.com")
+MODEL_NAME = config.get("deepseek_model", "deepseek-chat")
+TIME_WINDOW_HOURS = config.get("time_window_hours", 24)
+LIMIT_TESTING = config.get("limit_testing", False)
 
 # 文件路径配置
 files_config = config.get("files", {})
@@ -50,10 +46,10 @@ OUTPUT_DIR = os.path.join(CURRENT_DIR, files_config.get("output_dir", "daily_rep
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
-# DingTalk 配置 (优先环境变量)
+# DingTalk 配置
 DINGTALK_CONFIG = config.get("dingtalk", {})
-DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", DINGTALK_CONFIG.get("webhook_url", ""))
-DINGTALK_SECRET = os.environ.get("DINGTALK_SECRET", DINGTALK_CONFIG.get("secret", ""))
+DINGTALK_WEBHOOK = DINGTALK_CONFIG.get("webhook_url", "")
+DINGTALK_SECRET = DINGTALK_CONFIG.get("secret", "")
 
 
 # 核心 Prompt
@@ -399,11 +395,20 @@ def generate_daily_report(articles):
 def job():
     print(f"\n[{datetime.datetime.now()}] 开始执行每日任务...")
     
+    # 确定限制数量
+    limit_count = None
+    if LIMIT_TESTING:
+        # 如果是 True，默认限制为 1；如果是数字，则使用该数字
+        limit_count = 1 if isinstance(LIMIT_TESTING, bool) else int(LIMIT_TESTING)
+        print(f"[*] 测试模式开启: 仅处理前 {limit_count} 个源")
+
     # 1. 加载文章 RSS
     feeds = load_rss_feeds()
+    if limit_count:
+        feeds = feeds[:limit_count]
     
     # 2. 加载播客 RSS
-    podcast_feeds = load_opml_feeds(PODCAST_OPML_FILE)
+    podcast_feeds = load_opml_feeds(PODCAST_OPML_FILE, limit=limit_count)
     feeds.extend(podcast_feeds)
     
     all_articles = []

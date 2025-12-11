@@ -66,20 +66,6 @@ newblogs/
 
 *注：也可以通过环境变量 `OPENAI_API_KEY` 和 `DASHSCOPE_API_KEY` 覆盖配置文件中的设置。*
 
-## GitHub Actions 自动部署
-
-本项目已配置 GitHub Actions Workflow，支持每天北京时间早上 8:00 自动运行并推送钉钉通知。
-
-### 配置步骤
-
-1.  将代码推送到 GitHub 仓库。
-2.  在仓库 Settings -> Secrets and variables -> Actions 中添加以下 Repository secrets：
-    *   `DEEPSEEK_API_KEY`: DeepSeek API Key
-    *   `DASHSCOPE_API_KEY`: DashScope API Key
-    *   `DINGTALK_WEBHOOK`: 钉钉机器人 Webhook 地址
-    *   `DINGTALK_SECRET`: (可选) 钉钉机器人加签密钥
-3.  Workflow 将自动在每天 8:00 运行。
-
 ## 如何运行
 
 ### 1. 环境准备
