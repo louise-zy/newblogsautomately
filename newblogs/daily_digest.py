@@ -423,12 +423,13 @@ def job():
 if __name__ == "__main__":
     print("Daily Digest Service Started...")
     
-    # 立即运行一次测试
-    job()
+    # 立即运行一次测试 (如果需要)
+    # job()
     
-    # 设置定时任务 (例如每天早上 08:00)
-    # schedule.every().day.at("08:00").do(job)
+    # 设置定时任务 (每天早上 07:00)
+    print("[*] 定时任务已启动: 每天 07:00 执行")
+    schedule.every().day.at("07:00").do(job)
     
-    # while True:
-    #     schedule.run_pending()
-    #     time.sleep(60)
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
