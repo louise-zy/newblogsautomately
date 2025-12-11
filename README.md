@@ -1,132 +1,127 @@
-# [BestBlogs.dev](https://bestblogs.dev)
+# AI Daily Digest (BestBlogs)
 
-遇见更好的技术阅读，汇集顶级软件编程、人工智能、产品设计、商业科技、自我成长类文章，使用大语言模型进行评分、摘要、翻译等，让阅读更轻松、学习更高效。
+这是一个基于 AI 的全自动 RSS 阅读与摘要工具。它能够自动抓取指定的博客和播客源，筛选出过去 24 小时内的更新内容，并利用大语言模型（DeepSeek & Qwen）生成深度摘要日报。
 
-## 1. 介绍
+## 核心功能
 
-BestBlogs.dev 为您提供编程、人工智能、产品设计、商业科技和个人成长领域的精选内容，汇集自顶级技术公司和社区。我们利用先进的大语言模型，为每篇文章提供智能摘要、评分和翻译服务，帮助您快速筛选高价值内容，节省阅读时间。立即订阅，探索未来技术的无限可能！
+*   **多模态支持**：同时支持 **文本博客** 和 **音频播客**。
+*   **智能摘要**：
+    *   **文章**：使用 `DeepSeek-V3` 生成包含观点、数据和事实的深度摘要。
+    *   **播客**：使用 `DashScope (通义听悟)` 进行 ASR 转写，再用 `Qwen-Turbo` 生成结构化的深度解析报告（背景、论点、洞察）。
+*   **增量更新**：自动过滤掉旧内容，只处理过去 24 小时内发布的新闻。
+*   **自动日报**：生成 Markdown 格式的日报文件，排版精美。
+*   **钉钉推送**：支持将生成的日报自动推送到钉钉群机器人。
 
-![主要特性](./images/main_page_v4.png)
+## 项目结构
 
-![订阅精选](./images/main_page_v4_2.png)
+```text
+newblogs/
+├── daily_digest.py          # [核心入口] 主程序。负责调度、RSS抓取、流程控制和日报生成。
+├── podcast_analyzer.py      # [播客模块] 负责音频转写(ASR)和播客内容深度分析。
+├── rss_finder.py            # [辅助工具] 用于批量检测给定网址的 RSS 订阅源。
+├── known_rss_map.json       # [配置文件] 存储已知的 RSS URL 映射表。
+├── channels_from_excel.json # [数据源] 博客/网站列表源文件。
+├── daily_reports/           # [输出目录] 存放生成的每日 Markdown 报告。
+└── PRD.md                   # 项目需求文档。
+```
 
-### 1.1 优质文章
+## 依赖配置
 
-![文章列表](./images/article_list_v4.png)
+项目使用 `newblogs/config.json` 进行配置管理。请在运行前确保该文件存在并包含正确的 API Key。
 
-### 1.2 品质播客
+**config.json 示例**:
 
-![播客列表](./images/podcast_list_v4.png)
+```json
+{
+    "deepseek_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-chat",
+    "dashscope_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "dingtalk": {
+        "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxxxxx",
+        "secret": "SECxxxxxxxx"
+    },
+    "time_window_hours": 24,
+    "limit_testing": false,
+    "files": {
+        "rss_map_file": "known_rss_map.json",
+        "source_file": "channels_from_excel.json",
+        "podcast_opml_file": "../BestBlogs_RSS_Podcasts.opml",
+        "output_dir": "daily_reports"
+    }
+}
+```
 
-### 1.3 精选视频
+1.  **deepseek_api_key**: 用于 DeepSeek LLM (文章分析)。
+2.  **dashscope_api_key**: 用于阿里云 DashScope (播客转写与分析)。
+3.53.  **time_window_hours**: 抓取的时间窗口（小时），默认 24。
+54.  **dingtalk**: 钉钉机器人配置（可选）。
+    *   `webhook_url`: 机器人的 Webhook 地址。
+    *   `secret`: 加签密钥（如果开启了加签）。
+55.  **files**: 配置文件路径（相对于程序运行目录）。
+    *   `rss_map_file`: 已知 RSS 映射表。
+    *   `source_file`: 博客源 JSON。
+    *   `podcast_opml_file`: 播客 OPML 文件。
+    *   `output_dir`: 日报输出目录。
 
-![视频列表](./images/video_list_v4.png)
+*注：也可以通过环境变量 `OPENAI_API_KEY` 和 `DASHSCOPE_API_KEY` 覆盖配置文件中的设置。*
 
-### 1.4 热门推文
+## GitHub Actions 自动部署
 
-![推文列表](./images/twitter_list_v4.png)
+本项目已配置 GitHub Actions Workflow，支持每天北京时间早上 8:00 自动运行并推送钉钉通知。
 
-## 2. 订阅
+### 配置步骤
 
-网站订阅地址：[https://www.bestblogs.dev/#subscribe](https://www.bestblogs.dev/#subscribe)
+1.  将代码推送到 GitHub 仓库。
+2.  在仓库 Settings -> Secrets and variables -> Actions 中添加以下 Repository secrets：
+    *   `DEEPSEEK_API_KEY`: DeepSeek API Key
+    *   `DASHSCOPE_API_KEY`: DashScope API Key
+    *   `DINGTALK_WEBHOOK`: 钉钉机器人 Webhook 地址
+    *   `DINGTALK_SECRET`: (可选) 钉钉机器人加签密钥
+3.  Workflow 将自动在每天 8:00 运行。
 
-每周五推送最新的[精选推送](https://www.bestblogs.dev/newsletter)，包含本周最具价值的技术文章、人工智能动态、产品设计洞察等优质内容。
+## 如何运行
 
-![精选推送](./images/newsletter_list_v4.png)
+### 1. 环境准备
 
-## 3. RSS 源
+确保已安装 Python 3.8+ 及以下依赖库：
 
-网站内容来源于以下 RSS 订阅源（共 400 个）：
+```bash
+pip install requests feedparser html2text schedule dashscope
+```
 
-**所有订阅源：** [BestBlogs_RSS_ALL.opml](./BestBlogs_RSS_ALL.opml)
+### 2. 启动程序
 
-- **文章类**（170 个订阅源）：[BestBlogs_RSS_Articles.opml](./BestBlogs_RSS_Articles.opml)
-- **播客类**（30 个订阅源）：[BestBlogs_RSS_Podcasts.opml](./BestBlogs_RSS_Podcasts.opml)  
-- **视频类**（40 个订阅源）：[BestBlogs_RSS_Videos.opml](./BestBlogs_RSS_Videos.opml)
-- **Twitter 类**（160 个订阅源）：[BestBlogs_RSS_Twitters.opml](./BestBlogs_RSS_Twitters.opml)
+直接运行主脚本：
 
-您可以在 [订阅源页面](https://www.bestblogs.dev/sources) 浏览所有 RSS 订阅源信息，包括最近 3 个月的文章数量、精选文章数量和阅读数统计。
+```bash
+python daily_digest.py
+```
 
-![订阅源页面](./images/source_page_v4.png)
+程序启动后会：
+1.  加载 `channels_from_excel.json` 和 `known_rss_map.json` 中的博客源。
+2.  加载 `../BestBlogs_RSS_Podcasts.opml` 中的播客源。
+3.  扫描所有源，寻找过去 24 小时内的更新。
+4.  对发现的新文章/播客进行 AI 分析。
+5.  在 `daily_reports/` 目录下生成 `Daily_Digest_YYYY-MM-DD.md`。
 
-您可以直接导入这些 OPML 文件到您的 RSS 阅读器中。如有优质的 RSS 订阅源推荐，欢迎提 Issue 补充。
+## 工作原理
 
-## 4. 本站 RSS 订阅指南
+1.  **加载源**：脚本启动时读取 JSON 和 OPML 文件，构建订阅列表。
+2.  **过滤**：遍历每个 Feed 的 `entries`，比较发布时间。
+    *   如果 `(当前时间 - 发布时间) < 24小时`，则标记为新内容。
+3.  **分流处理**：
+    *   **文本文章**：提取 HTML -> 转 Markdown -> 调用 DeepSeek 生成摘要。
+    *   **播客音频**：提取 `enclosure` 音频链接 -> 调用 DashScope 进行语音转写 (ASR) -> 调用 Qwen-Turbo 基于逐字稿生成深度报告。
+4.  **生成报告**：将所有分析结果汇总，写入 Markdown 文件。
 
-BestBlogs.dev 提供灵活的 RSS 订阅功能，支持按需订阅：
+## 常见问题
 
-- **全站订阅：** [https://www.bestblogs.dev/zh/feeds/rss](https://www.bestblogs.dev/zh/feeds/rss)
-- **精选文章订阅：** [https://www.bestblogs.dev/zh/feeds/rss?featured=y](https://www.bestblogs.dev/zh/feeds/rss?featured=y)
-- **编程技术类文章：** [https://www.bestblogs.dev/zh/feeds/rss?category=programming](https://www.bestblogs.dev/zh/feeds/rss?category=programming)
-- **人工智能高分文章：** [https://www.bestblogs.dev/en/feeds/rss?category=ai&minScore=90](https://www.bestblogs.dev/en/feeds/rss?category=ai&minScore=90)
+*   **为什么只看到很少的内容？**
+    *   程序严格限制只处理**过去 24 小时**发布的内容。如果订阅源最近没有更新，或者更新时间超过了 24 小时，都会被跳过。
+*   **播客分析失败？**
+    *   请检查 `DASHSCOPE_API_KEY` 是否有效。
+    *   部分音频格式或超长音频（超过几小时）可能偶尔导致 API 超时。
 
-更多参数说明和用法请参考：[BestBlogs.dev RSS 订阅指南](./BestBlogs_RSS_Doc.md)
-
-另外网站还添加了每周精选推送周刊的 RSS 订阅支持，订阅地址：[https://www.bestblogs.dev/zh/feeds/rss/newsletter](https://www.bestblogs.dev/zh/feeds/rss/newsletter)
-
-## 5. 开放 API
-
-BestBlogs.dev 提供开放 API 接口，支持文章、播客、推文等内容的智能分析和获取。
-
-API 文档：[BestBlogs_OpenAPI_Doc.md](./BestBlogs_OpenAPI_Doc.md)
-
-## 6. 实现原理
-
-### 6.1 文章智能分析
-
-详细实践文档：[BestBlogs.dev 基于 Dify Workflow 的文章智能分析实践](./flows/Dify/BestBlogs.dev%20基于%20Dify%20Workflow%20的文章智能分析实践.md)
-
-![主要流程](./flows/Dify/flowImages/bestblogs_main_flow.png)
-
-**1. 文章爬取流程**
-基于 RSS 协议爬取所有订阅源的文章信息（标题、链接、发布时间等），通过无头浏览器获取完整文章内容。利用订阅源配置的正文选择器提取文章正文，并对 HTML、图片等进行标准化处理。
-
-**2. 文章初评流程**  
-通过语言类型、内容质量等特征对文章进行初步评分，过滤低质量内容，提高后续处理效率。使用 Dify Workflow 实现，DSL 参见：[BestBlogs 文章初评流程](./flows/Dify/dsl/BestBlogs%20文章初评流程.yml)
-
-**3. 文章深度分析流程**  
-通过大语言模型（GPT-4o）对文章进行全面分析，生成一句话总结、详细摘要、主要观点、文章金句、领域分类、标签列表和质量评分等。包含 *分段分析 → 汇总分析 → 领域划分和标签生成 → 文章评分 → 检查反思 → 优化改进* 等环节。DSL 参见：[BestBlogs 文章分析流程](./flows/Dify/dsl/BestBlogs%20文章分析流程.yml)
-
-**4. 多语言翻译流程**  
-支持中英双语，自动识别原文语言并生成目标语言的分析结果。包含 *识别专业术语 → 初次翻译 → 检查翻译 → 意译优化* 等环节。DSL 参见：[BestBlogs 文章分析结果翻译流程](./flows/Dify/dsl/BestBlogs%20文章分析结果翻译.yml)
-
-### 6.2 播客智能分析
-
-实现方案详见：[BestBlogs.dev 基于通义听悟和 Dify 实现播客智能分析](./docs/BestBlogs.dev%20基于通义听悟和%20Dify%20实现播客智能分析.md)
-
-### 6.3 视频智能分析
-
-方案开发中，敬请期待 🎬
-
-### 6.4 推文智能分析
-
-实现方案详见：[BestBlogs.dev 基于 XGo.ing 和 Dify 实现推文智能分析](./docs/BestBlogs.dev%20基于%20XGo.ing%20和%20Dify%20实现推文智能分析.md)
-
-## 7. 支持与交流
-
-如果您觉得 BestBlogs.dev 对您有帮助，欢迎：
-
-- ⭐ 给项目点个 Star
-- 💝 赞赏支持项目发展  
-- 👥 加入读者交流群讨论
-- 📧 邮件反馈建议：[hi@gino.bot](mailto:hi@gino.bot)
-
-<div align="center">
-
-| 赞赏支持项目发展 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 添加作者微信加入群聊 |
-|:---:|:---:|:---:|
-| <img src="https://bestblogs.dev/support-qrcode.png" alt="赞赏支持项目发展" width="200" /> | | <img src="https://bestblogs.dev/author-qrcode.png" alt="添加微信加入群聊" width="200" /> |
-
-</div>
-
-## 8. 致谢
-
-感谢以下开源项目的支持：
-
-- [RSSHub](https://github.com/DIYgod/RSSHub) - 万物皆可 RSS
-- [wechat2rss](https://github.com/ttttmr/Wechat2RSS) - 微信公众号转 RSS
-- [Dify](https://github.com/langgenius/dify) - LLM 应用开发平台
-- [Gemini Balancer](https://github.com/snailyp/gemini-balance) - Gemini 轮询代理服务
-- [Bark](https://github.com/Finb/Bark) - iOS 推送通知工具
-- [Uptime Kuma](https://github.com/louislam/uptime-kuma) - 自建监控服务
-- [XGo.ing](https://xGo.ing) - 推文 RSS
+---
+*Created for BestBlogs Project.*
