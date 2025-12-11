@@ -6,7 +6,16 @@ from dashscope.audio.asr import Transcription
 from dashscope import Generation
 import dashscope
 
-DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "sk-e28a0c76241a48f4b30458ad598e1ae1")
+# 加载配置
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+try:
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+except Exception as e:
+    print(f"[-] 配置文件加载失败: {e}")
+    config = {}
+
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", config.get("dashscope_api_key", ""))
 dashscope.api_key = DASHSCOPE_API_KEY
 
 def transcribe_audio(audio_url):

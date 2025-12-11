@@ -163,7 +163,7 @@ workflow:
         type: start
         variables:
         - label: BestBlogs 文章 Id
-          max_length: 20
+          max_length: 100
           options: []
           required: true
           type: text-input
@@ -228,7 +228,7 @@ workflow:
           max_write_timeout: 0
         title: 获取文章信息
         type: http-request
-        url: https://api.bestblogs.dev/api/resource/markdown
+        url: https://exactable-superadmirable-lilla.ngrok-free.dev/api/resource/article/detail
         variables: []
       height: 139
       id: '1719356422842'

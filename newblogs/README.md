@@ -10,6 +10,7 @@
     *   **播客**：使用 `DashScope (通义听悟)` 进行 ASR 转写，再用 `Qwen-Turbo` 生成结构化的深度解析报告（背景、论点、洞察）。
 *   **增量更新**：自动过滤掉旧内容，只处理过去 24 小时内发布的新闻。
 *   **自动日报**：生成 Markdown 格式的日报文件，排版精美。
+*   **钉钉推送**：支持将生成的日报自动推送到钉钉群机器人。
 
 ## 项目结构
 
@@ -26,12 +27,58 @@ newblogs/
 
 ## 依赖配置
 
-项目运行需要以下环境变量（API Key）：
+项目使用 `newblogs/config.json` 进行配置管理。请在运行前确保该文件存在并包含正确的 API Key。
 
-1.  **OPENAI_API_KEY**: 用于 DeepSeek LLM (文章分析)。
-    *   *默认配置在 `daily_digest.py` 中*
-2.  **DASHSCOPE_API_KEY**: 用于阿里云 DashScope (播客转写与分析)。
-    *   *默认配置在 `podcast_analyzer.py` 中*
+**config.json 示例**:
+
+```json
+{
+    "deepseek_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-chat",
+    "dashscope_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+    "dingtalk": {
+        "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxxxxx",
+        "secret": "SECxxxxxxxx"
+    },
+    "time_window_hours": 24,
+    "limit_testing": false,
+    "files": {
+        "rss_map_file": "known_rss_map.json",
+        "source_file": "channels_from_excel.json",
+        "podcast_opml_file": "../BestBlogs_RSS_Podcasts.opml",
+        "output_dir": "daily_reports"
+    }
+}
+```
+
+1.  **deepseek_api_key**: 用于 DeepSeek LLM (文章分析)。
+2.  **dashscope_api_key**: 用于阿里云 DashScope (播客转写与分析)。
+3.53.  **time_window_hours**: 抓取的时间窗口（小时），默认 24。
+54.  **dingtalk**: 钉钉机器人配置（可选）。
+    *   `webhook_url`: 机器人的 Webhook 地址。
+    *   `secret`: 加签密钥（如果开启了加签）。
+55.  **files**: 配置文件路径（相对于程序运行目录）。
+    *   `rss_map_file`: 已知 RSS 映射表。
+    *   `source_file`: 博客源 JSON。
+    *   `podcast_opml_file`: 播客 OPML 文件。
+    *   `output_dir`: 日报输出目录。
+
+*注：也可以通过环境变量 `OPENAI_API_KEY` 和 `DASHSCOPE_API_KEY` 覆盖配置文件中的设置。*
+
+## GitHub Actions 自动部署
+
+本项目已配置 GitHub Actions Workflow，支持每天北京时间早上 8:00 自动运行并推送钉钉通知。
+
+### 配置步骤
+
+1.  将代码推送到 GitHub 仓库。
+2.  在仓库 Settings -> Secrets and variables -> Actions 中添加以下 Repository secrets：
+    *   `DEEPSEEK_API_KEY`: DeepSeek API Key
+    *   `DASHSCOPE_API_KEY`: DashScope API Key
+    *   `DINGTALK_WEBHOOK`: 钉钉机器人 Webhook 地址
+    *   `DINGTALK_SECRET`: (可选) 钉钉机器人加签密钥
+3.  Workflow 将自动在每天 8:00 运行。
 
 ## 如何运行
 

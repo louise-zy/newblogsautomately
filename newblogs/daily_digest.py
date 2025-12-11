@@ -7,27 +7,54 @@ import feedparser
 import html2text
 import schedule
 import xml.etree.ElementTree as ET
+import hmac
+import hashlib
+import base64
+import urllib.parse
 from urllib.parse import urlparse
 from podcast_analyzer import analyze_podcast_audio
 
 # ==========================================
 # 配置
 # ==========================================
-# API Key 配置
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "sk-f0da4ec56a0344d299f15d078ea811af")
-OPENAI_BASE_URL = "https://api.deepseek.com"
-MODEL_NAME = "deepseek-chat"
-
-# 文件路径
+# 加载配置文件
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-RSS_MAP_FILE = os.path.join(CURRENT_DIR, "known_rss_map.json")
-SOURCE_FILE = os.path.join(CURRENT_DIR, "channels_from_excel.json")
-PODCAST_OPML_FILE = os.path.join(os.path.dirname(CURRENT_DIR), "BestBlogs_RSS_Podcasts_copy.opml")
-OUTPUT_DIR = os.path.join(CURRENT_DIR, "daily_reports")
+CONFIG_FILE = os.path.join(CURRENT_DIR, "config.json")
+
+try:
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        config = json.load(f)
+except Exception as e:
+    print(f"[-] 配置文件加载失败: {e}")
+    config = {}
+
+# API Key 配置 (优先使用环境变量，其次使用配置文件)
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", config.get("deepseek_api_key", ""))
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", config.get("deepseek_base_url", "https://api.deepseek.com"))
+MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", config.get("deepseek_model", "deepseek-chat"))
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", config.get("dashscope_api_key", ""))
+TIME_WINDOW_HOURS = int(os.environ.get("TIME_WINDOW_HOURS", config.get("time_window_hours", 24)))
+
+# 设置 DashScope API Key 环境变量供 SDK 使用
+if DASHSCOPE_API_KEY:
+    os.environ["DASHSCOPE_API_KEY"] = DASHSCOPE_API_KEY
+
+# 文件路径配置
+files_config = config.get("files", {})
+RSS_MAP_FILE = os.path.join(CURRENT_DIR, files_config.get("rss_map_file", "known_rss_map.json"))
+SOURCE_FILE = os.path.join(CURRENT_DIR, files_config.get("source_file", "channels_from_excel.json"))
+PODCAST_OPML_FILE = os.path.join(CURRENT_DIR, files_config.get("podcast_opml_file", "../BestBlogs_RSS_Podcasts.opml"))
+OUTPUT_DIR = os.path.join(CURRENT_DIR, files_config.get("output_dir", "daily_reports"))
 
 # 确保输出目录存在
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
+
+# DingTalk 配置 (优先环境变量)
+DINGTALK_CONFIG = config.get("dingtalk", {})
+DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", DINGTALK_CONFIG.get("webhook_url", ""))
+DINGTALK_SECRET = os.environ.get("DINGTALK_SECRET", DINGTALK_CONFIG.get("secret", ""))
+
 
 # 核心 Prompt
 ARTICLE_ANALYSIS_PROMPT = """
@@ -206,6 +233,43 @@ def call_deepseek_analyze(content):
         print(f"[-] LLM 分析失败: {e}")
         return None
 
+def send_dingtalk_notification(title, text):
+    """发送钉钉机器人通知"""
+    if not DINGTALK_WEBHOOK:
+        print("[-] 未配置钉钉 Webhook，跳过发送。")
+        return
+
+    webhook_url = DINGTALK_WEBHOOK
+    
+    # 如果配置了加签 (Secret)
+    if DINGTALK_SECRET:
+        timestamp = str(round(time.time() * 1000))
+        secret_enc = DINGTALK_SECRET.encode('utf-8')
+        string_to_sign = '{}\n{}'.format(timestamp, DINGTALK_SECRET)
+        string_to_sign_enc = string_to_sign.encode('utf-8')
+        hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
+        sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+        webhook_url = f"{DINGTALK_WEBHOOK}&timestamp={timestamp}&sign={sign}"
+
+    # 构造消息
+    # 钉钉 Markdown 消息
+    data = {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": title,
+            "text": text
+        }
+    }
+
+    try:
+        resp = requests.post(webhook_url, json=data)
+        if resp.json().get("errcode") == 0:
+            print("[+] 钉钉通知发送成功")
+        else:
+            print(f"[-] 钉钉通知发送失败: {resp.text}")
+    except Exception as e:
+        print(f"[-] 发送钉钉请求异常: {e}")
+
 def process_feed(feed):
     """处理单个 RSS Feed"""
     print(f"[*] 正在检查: {feed['name']} ({feed['rss_url']})")
@@ -229,8 +293,8 @@ def process_feed(feed):
             # 如果没有时间，或者时间在 24 小时内
             is_new = False
             if published_time:
-                # 简单判断：过去 24 小时
-                if (now - published_time).total_seconds() < 24 * 3600:
+                # 简单判断：过去 TIME_WINDOW_HOURS 小时
+                if (now - published_time).total_seconds() < TIME_WINDOW_HOURS * 3600:
                     is_new = True
             else:
                 pass 
@@ -319,6 +383,17 @@ def generate_daily_report(articles):
             f.write("---\n\n")
             
     print(f"\n[√] 日报已生成: {filepath}")
+    
+    # 读取生成的文件内容用于发送
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    # 发送钉钉通知
+    # 钉钉有消息长度限制，这里做个简单截断保护，或者仅发送摘要链接（如果有在线版）
+    # 目前我们发送全量，如果过长可能需要切割
+    if content:
+        send_dingtalk_notification(f"RSS Daily Digest {date_str}", content)
+        
     return filepath
 
 def job():
