@@ -22,7 +22,7 @@ MODEL_NAME = "deepseek-chat"
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 RSS_MAP_FILE = os.path.join(CURRENT_DIR, "known_rss_map.json")
 SOURCE_FILE = os.path.join(CURRENT_DIR, "channels_from_excel.json")
-PODCAST_OPML_FILE = os.path.join(os.path.dirname(CURRENT_DIR), "BestBlogs_RSS_ALL_copy.opml")
+PODCAST_OPML_FILE = os.path.join(os.path.dirname(CURRENT_DIR), "BestBlogs_RSS_Podcasts_copy.opml")
 OUTPUT_DIR = os.path.join(CURRENT_DIR, "daily_reports")
 
 # 确保输出目录存在
@@ -229,8 +229,8 @@ def process_feed(feed):
             # 如果没有时间，或者时间在 24 小时内
             is_new = False
             if published_time:
-                # 简单判断：过去 30 天 (为了测试播客，暂时放宽时间限制)
-                if (now - published_time).total_seconds() < 24 * 3600 * 30:
+                # 简单判断：过去 24 小时
+                if (now - published_time).total_seconds() < 24 * 3600:
                     is_new = True
             else:
                 pass 
@@ -270,10 +270,11 @@ def process_feed(feed):
                         "analysis": analysis,
                         "is_podcast": is_podcast_entry
                     })
-                    
-                    # 测试模式：每个 feed 只处理 1 篇文章/播客
-                    if len(today_articles) >= 1:
-                        break
+            else:
+                if published_time:
+                    print(f"  [-] 跳过旧内容: {entry.title} ({published_time})")
+                else:
+                    print(f"  [-] 跳过无时间戳内容: {entry.title}")
                         
         return today_articles
         
@@ -323,12 +324,11 @@ def generate_daily_report(articles):
 def job():
     print(f"\n[{datetime.datetime.now()}] 开始执行每日任务...")
     
-    # 1. 加载文章 RSS (测试播客时暂时跳过)
-    # feeds = load_rss_feeds()
-    feeds = []
+    # 1. 加载文章 RSS
+    feeds = load_rss_feeds()
     
-    # 2. 加载播客 RSS (测试阶段仅加载 1 个)
-    podcast_feeds = load_opml_feeds(PODCAST_OPML_FILE, limit=1)
+    # 2. 加载播客 RSS
+    podcast_feeds = load_opml_feeds(PODCAST_OPML_FILE)
     feeds.extend(podcast_feeds)
     
     all_articles = []
