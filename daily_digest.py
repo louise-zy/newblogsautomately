@@ -230,7 +230,7 @@ def call_deepseek_analyze(content):
         return None
 
 def send_dingtalk_notification(title, text):
-    """发送钉钉机器人通知"""
+    """发送钉钉机器人通知 (支持长文本分段)"""
     if not DINGTALK_WEBHOOK:
         print("[-] 未配置钉钉 Webhook，跳过发送。")
         return
@@ -247,24 +247,51 @@ def send_dingtalk_notification(title, text):
         sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
         webhook_url = f"{DINGTALK_WEBHOOK}&timestamp={timestamp}&sign={sign}"
 
-    # 构造消息
-    # 钉钉 Markdown 消息
-    data = {
-        "msgtype": "markdown",
-        "markdown": {
-            "title": title,
-            "text": text
-        }
-    }
-
-    try:
-        resp = requests.post(webhook_url, json=data)
-        if resp.json().get("errcode") == 0:
-            print("[+] 钉钉通知发送成功")
+    # 分段发送逻辑
+    # 钉钉限制每个消息大概 20000 字节，为了安全起见，限制在 4000 字符左右分段
+    MAX_LENGTH = 4000
+    
+    # 简单的按长度切分可能会切断 Markdown 格式，尝试按行切分
+    lines = text.split('\n')
+    chunks = []
+    current_chunk = ""
+    
+    for line in lines:
+        if len(current_chunk) + len(line) + 1 > MAX_LENGTH:
+            chunks.append(current_chunk)
+            current_chunk = line + "\n"
         else:
-            print(f"[-] 钉钉通知发送失败: {resp.text}")
-    except Exception as e:
-        print(f"[-] 发送钉钉请求异常: {e}")
+            current_chunk += line + "\n"
+            
+    if current_chunk:
+        chunks.append(current_chunk)
+        
+    print(f"[*] 消息过长，已切分为 {len(chunks)} 条发送")
+
+    for i, chunk in enumerate(chunks):
+        # 构造消息
+        # 钉钉 Markdown 消息
+        chunk_title = title if i == 0 else f"{title} (Part {i+1})"
+        data = {
+            "msgtype": "markdown",
+            "markdown": {
+                "title": chunk_title,
+                "text": chunk
+            }
+        }
+
+        try:
+            resp = requests.post(webhook_url, json=data)
+            if resp.json().get("errcode") == 0:
+                print(f"[+] 钉钉通知 (Part {i+1}) 发送成功")
+            else:
+                print(f"[-] 钉钉通知 (Part {i+1}) 发送失败: {resp.text}")
+            
+            # 稍微延时避免触发频率限制
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"[-] 发送钉钉请求异常: {e}")
 
 def process_feed(feed):
     """处理单个 RSS Feed"""
@@ -352,7 +379,6 @@ def generate_daily_report(articles):
     filename = f"Daily_Digest_{date_str}.md"
     filepath = os.path.join(OUTPUT_DIR, filename)
     
-    # 1. 生成完整日报文件
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(f"# 📅 Daily RSS Digest - {date_str}\n\n")
         f.write(f"> 今日共更新 {len(articles)} 篇文章\n\n")
@@ -381,35 +407,15 @@ def generate_daily_report(articles):
             
     print(f"\n[√] 日报已生成: {filepath}")
     
-    # 2. 生成钉钉通知内容 (精简版)
-    # 避免发送过长内容导致 430104 错误
-    dingtalk_content = f"# 📅 Daily RSS Digest - {date_str}\n\n"
-    dingtalk_content += f"> 今日共更新 {len(articles)} 篇文章\n\n"
-    
-    for i, article in enumerate(articles, 1):
-        analysis = article['analysis']
-        title_prefix = "[🎙️] " if article.get('is_podcast') else ""
-        title = analysis.get('title_translated', article['original_title'])
-        one_sentence = analysis.get('one_sentence_summary', '暂无摘要')
+    # 读取生成的文件内容用于发送
+    with open(filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
         
-        # 构建单个条目
-        item_text = f"### {i}. {title_prefix}{title}\n"
-        item_text += f"**来源**: {article['author']} | **评分**: {analysis.get('score', 0)}\n"
-        item_text += f"> {one_sentence}\n"
-        item_text += f"[查看原文]({article['link']})\n\n"
-        
-        # 检查长度，如果太长就停止添加
-        if len(dingtalk_content) + len(item_text) > 15000:
-            dingtalk_content += f"\n> ... 还有 {len(articles) - i + 1} 篇未显示，请查看完整日报。\n"
-            break
-            
-        dingtalk_content += item_text
-        
-    dingtalk_content += "\n---\n*完整报告请查看 GitHub Artifacts 或本地文件*"
-
     # 发送钉钉通知
-    if dingtalk_content:
-        send_dingtalk_notification(f"RSS Daily Digest {date_str}", dingtalk_content)
+    # 钉钉有消息长度限制，这里做个简单截断保护，或者仅发送摘要链接（如果有在线版）
+    # 目前我们发送全量，如果过长可能需要切割
+    if content:
+        send_dingtalk_notification(f"RSS Daily Digest {date_str}", content)
         
     return filepath
 
