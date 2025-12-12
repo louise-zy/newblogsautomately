@@ -48,8 +48,8 @@ if not os.path.exists(OUTPUT_DIR):
 
 # DingTalk 配置
 DINGTALK_CONFIG = config.get("dingtalk", {})
-DINGTALK_WEBHOOK = DINGTALK_CONFIG.get("webhook_url", "")
-DINGTALK_SECRET = DINGTALK_CONFIG.get("secret", "")
+DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", DINGTALK_CONFIG.get("webhook_url", ""))
+DINGTALK_SECRET = os.environ.get("DINGTALK_SECRET", DINGTALK_CONFIG.get("secret", ""))
 
 
 # 核心 Prompt
