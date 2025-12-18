@@ -39,7 +39,7 @@ LIMIT_TESTING = config.get("limit_testing", False)
 files_config = config.get("files", {})
 RSS_MAP_FILE = os.path.join(CURRENT_DIR, files_config.get("rss_map_file", "known_rss_map.json"))
 SOURCE_FILE = os.path.join(CURRENT_DIR, files_config.get("source_file", "channels_from_excel.json"))
-PODCAST_OPML_FILE = os.path.join(CURRENT_DIR, files_config.get("podcast_opml_file", "../BestBlogs_RSS_Podcasts.opml"))
+PODCAST_OPML_FILE = os.path.join(CURRENT_DIR, files_config.get("podcast_opml_file", "BestBlogs_RSS_Podcasts_copy.opml"))
 OUTPUT_DIR = os.path.join(CURRENT_DIR, files_config.get("output_dir", "daily_reports"))
 
 # 确保输出目录存在
@@ -235,6 +235,10 @@ def send_dingtalk_notification(title, text):
         print("[-] 未配置钉钉 Webhook，跳过发送。")
         return
 
+    # 强制添加关键字前缀，确保触发钉钉安全设置
+    if "【RSS】" not in title:
+        title = f"【RSS】{title}"
+
     webhook_url = DINGTALK_WEBHOOK
     
     # 如果配置了加签 (Secret)
@@ -371,16 +375,19 @@ def process_feed(feed):
 
 def generate_daily_report(articles):
     """生成日报 Markdown"""
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    
     if not articles:
         print("[!] 今天没有新文章，不生成报告。")
+        # 发送无更新通知，确保用户知道程序运行正常
+        send_dingtalk_notification(f"RSS Daily Digest {date_str}", "今天没有发现更新内容。")
         return
     
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     filename = f"Daily_Digest_{date_str}.md"
     filepath = os.path.join(OUTPUT_DIR, filename)
     
     with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(f"# 📅 Daily RSS Digest - {date_str}\n\n")
+        f.write(f"# 📅 【RSS】Daily RSS Digest - {date_str}\n\n")
         f.write(f"> 今日共更新 {len(articles)} 篇文章\n\n")
         f.write("---\n\n")
         
