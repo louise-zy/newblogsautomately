@@ -51,6 +51,12 @@ DINGTALK_CONFIG = config.get("dingtalk", {})
 DINGTALK_WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", DINGTALK_CONFIG.get("webhook_url", ""))
 DINGTALK_SECRET = os.environ.get("DINGTALK_SECRET", DINGTALK_CONFIG.get("secret", ""))
 
+if DINGTALK_WEBHOOK:
+    print(f"[*] DingTalk Webhook 配置已检测到 (长度: {len(DINGTALK_WEBHOOK)})")
+else:
+    print("[-] 警告: 未检测到 DingTalk Webhook 配置")
+
+
 
 # 核心 Prompt
 ARTICLE_ANALYSIS_PROMPT = """
